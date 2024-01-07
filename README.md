@@ -56,38 +56,51 @@ A static store of [private](https://learnmeabitcoin.com/beginners/keys_addresses
 
 In both cases you'll need the Bitcoin Core client:
 
-- **Download** the latest [Bitcoin Core client](https://bitcoin.org/en/download) on a secure computer.
+- **Download** the latest [Bitcoin Core client](https://bitcoincore.org/en/download/) on a secure computer.
 
 > A *GNU/Linux x86-64 Fedora 34 workstation* is used here.
 
 ```bash
-$ wget https://bitcoincore.org/bin/bitcoin-core-23.0/bitcoin-23.0-x86_64-linux-gnu.tar.gz
+$ wget https://bitcoincore.org/bin/bitcoin-core-26.0/bitcoin-26.0-x86_64-linux-gnu.tar.gz
 ```
 
 - **Verify** that the file you just downloaded is unaltered:
 
 ```bash
-$ wget https://bitcoincore.org/bin/bitcoin-core-23.0/SHA256SUMS
+$ wget https://bitcoincore.org/bin/bitcoin-core-26.0/SHA256SUMS
 $ sha256sum --ignore-missing --check SHA256SUMS
-bitcoin-23.0-x86_64-linux-gnu.tar.gz: OK
+bitcoin-26.0-x86_64-linux-gnu.tar.gz: OK
 ```
 
-- **Verify** that the checksum file you just used to verify the correctness of the downloaded client is signed by at least an approved Bitcoin developer:
+- **Verify** that the binaries are signed:
+
+https://github.com/bitcoin/bitcoin/tree/master/contrib/verify-binaries
+
+> First, you have to figure out which public keys to recognize. Browse the [list of frequent builder-keys](https://github.com/bitcoin-core/guix.sigs/tree/main/builder-keys) and decide which of these keys you would like to trust. For each key you want to trust, you must obtain that key for your local GPG installation.
+
 
 ```
-$ gpg --keyserver hkps://keys.openpgp.org --refresh-keys
-$ wget https://raw.githubusercontent.com/bitcoin/bitcoin/master/contrib/builder-keys/keys.txt
-$ while read fingerprint keyholder_name; do gpg --keyserver hkps://keys.openpgp.org --recv-keys ${fingerprint}; done < ./keys.txt
+$ wget https://raw.githubusercontent.com/bitcoin-core/guix.sigs/main/builder-keys/achow101.gpg
+$ gpg --import achow101.gpg
+gpg: key 17565732E08E5E41: 29 signatures not checked due to missing keys
+gpg: key 17565732E08E5E41: public key "Andrew Chow <andrew@achow101.com>" imported
+gpg: Total number processed: 1
+gpg:               imported: 1
+gpg: no ultimately trusted keys found
 
-$ wget https://bitcoincore.org/bin/bitcoin-core-23.0/SHA256SUMS.asc
+# Or import all keys at once:
+$ git clone https://github.com/bitcoin-core/guix.sigs
+$ gpg --import guix.sigs/builder-keys/*
+
+$ wget https://bitcoincore.org/bin/bitcoin-core-26.0/SHA256SUMS.asc
 $ gpg --verify SHA256SUMS.asc
 ```
-> Complete verify instructions: https://bitcoin.org/en/download
+> Complete verify instructions: https://bitcoincore.org/en/download/
 
 
 # Generating a seed
 
-There are many ways of generating a seed, but it all starts with [generating enough entropy](https://learnmeabitcoin.com/technical/mnemonic#generate-entropy) as input.
+There are many ways of generating a seed, but it always starts with [generating enough entropy](https://learnmeabitcoin.com/technical/mnemonic#generate-entropy) as input.
 
 ## Generating entropy
 
@@ -97,33 +110,34 @@ For generating N bits of entropy, you can:
 - Flip a coin N times and mark each result as *1* or *0*.
 - Roll a dice a few hundreds of times (depending on the desired entropy amount).
 - Get [entropy from a photograph](https://darkfield.dev/2021/01/30/entropy-from-images/).
-- Use a trusted (P)RNG.
+- **Especially**, use a trusted (P)RNG.
 
 > **[Seed entropy != Seed length](https://crypto.stackexchange.com/a/10405)**.
 
-> Regarding seed length, Bitcoin Core can only use seeds of max 256 bits length for **legacy** wallets (more on that later).
+> About seed length, Bitcoin Core can only use seeds of max 256 bits length for **legacy** wallets (more on that later).
 
 
 ## Bitcoin Core and BIP39
 
 BIP39 is a simple, human-friendly way to encode entropy into a mnemonic sentence that is easy to remember or archive, compared to the N bits of entropy you generated earlier.
 
-> BIP39 is not about managing *user-generated sentences*. It is about encoding entropy into a mnemonic.
+> BIP39 is not about managing *user-generated sentences*. It is only about encoding entropy into a mnemonic.
 
-The BIP39 processs generates **512-bits seeds** from **up to 256 bits of entropy** used as input. This is incompatible with the **256-bits seeds** max length required by Bitcoin Core for **legacy** wallets. Indeed, Bitcoin Core internally represents seeds for legacy wallets in a [32-bytes](https://github.com/bitcoin/bitcoin/issues/16393) data structure (and changing this is deemed as [not trivial](https://github.com/bitcoin/bitcoin/issues/19151#issuecomment-816755606)).
+The BIP39 processs generates **512-bits seeds** from **up to 256 bits of entropy** used as input. This default process is incompatible with the **256-bits seeds** required by Bitcoin Core for managing **legacy** wallets. Indeed, Bitcoin Core internally represents seeds for legacy wallets in a [32-bytes](https://github.com/bitcoin/bitcoin/issues/16393) data structure (and changing this is deemed as [not trivial](https://github.com/bitcoin/bitcoin/issues/19151#issuecomment-816755606)).
 
-> So, the `sethdseed` RPC call of the Bitcoin Core client will only accept a 256-bits seed for creating/restoring a wallet.
+> Hence, the now legacy `sethdseed` RPC call of the Bitcoin Core client will only accept a 256-bits seed for creating/restoring a legacy wallet.
 
 **As a consequence, you cannot use BIP39 to generate seeds for use with legacy wallets.**
 
 > Note that the BIP39 mnemonic standard may have [some flaws](https://en.bitcoin.it/wiki/Seed_phrase#BIP39_and_its_flaws) and is not planned to be implemented in Core anyway (see [#17748](https://github.com/bitcoin/bitcoin/issues/17748), [#19151](https://github.com/bitcoin/bitcoin/issues/19151)).
 
-However, with descriptor wallets, usage of 512-bits seeds is possible thus making the use of BIP39 possible for managing the memorization and archiving of such seeds.
+However, with *descriptor* wallets, usage of 512-bits seeds is possible, thus making the use of BIP39 possible for managing the memorization and archiving of such seeds.
 
 The [BIP39 process](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki):
 
-- Starts with [generating](https://learnmeabitcoin.com/technical/mnemonic#generate-entropy) **128 to 256 bits** of **entropy** from a trusted source, then adding a checksum to it.
-- [Encode](https://learnmeabitcoin.com/technical/mnemonic#entropy-to-mnemonic) the generated entropy as a sorted list of 12 to 24-words.
+- Starts with [generating](https://learnmeabitcoin.com/technical/mnemonic#generate-entropy) **128 to 256 bits** of **entropy** from a trusted source.
+- Adds a checksum of the generated entropy.
+- [Encode](https://learnmeabitcoin.com/technical/mnemonic#entropy-to-mnemonic) the generated entropy as a sorted list of 12 to 24-words (128/256 bits).
 
 This "mnemonic" becomes **the only secret you need to remember** for managing your wallet on the long run (given it remains the sole seed used by your wallet in the long run).
 
@@ -131,9 +145,9 @@ This "mnemonic" becomes **the only secret you need to remember** for managing yo
 
 - First, an optional *passphrase* must be chosen (default is to use an empty string)
 
-> Setting a passphrase provides a 2 factor authentication process when restoring your wallet: The seed will be the *something you have* while the passphrase the *something you know*. Both needs to be remembered because any different passphrase would change the seed to be generated.
+> Setting a passphrase provides a 2 factor authentication process when restoring your wallet: The seed will be the *something you have* while the passphrase the *something you know*. Both needs to be remembered because any different passphrase would change the final seed to be generated.
 
-- [The mnemonic and the optional passphrase](https://learnmeabitcoin.com/technical/mnemonic#mnemonic-to-seed) are sent for 2048 iterations in a slow **Key Derivation Function**: PBKDF2 with HMAC-SHA512 as the hashing algorithm.
+- [The mnemonic and the optional passphrase](https://learnmeabitcoin.com/technical/mnemonic#mnemonic-to-seed) are sent by default for 2048 iterations to a slow **Key Derivation Function**: PBKDF2 (with HMAC-SHA512 as the hashing algorithm).
 
 > This prevents brute force attack on the mnemonic and ensure a **512-bits output**.
 
@@ -145,19 +159,19 @@ The output of this process is a **BIP39 seed**.
 
 **Play with BIP-39**: https://iancoleman.io/bip39/
 
-# From Seed to Extended Master Private Key
+# From a seed to an Extended Master Private Key
 
-Let's consider that we have a **512-bits seed number** generated from BIP39.
+Let's consider that we have a **512-bits seed number** (generated using BIP39 or not).
 
-**Now comes [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki).**
+**Now comes [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki):**
 
 To work down to individual private keys and generated addresses in a Bitcoin core wallet (legacy or not), Bitcoin Core will **hash** this seed with **HMAC-SHA512** and the "`Bitcoin seed`" string as the HMAC key.
 
-This process yields **[512 bits of output](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#master-key-generation)** where the left 256 bits become the [**Master Private Key**](https://developer.bitcoin.org/devguide/wallets.html#id6) while the right 256 bits become the [**Master Chain Code**](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#master-key-generation) of the BIP32 HD wallet (the chain code is **necessary** to derive child keys).
+This process also yields **[512 bits of output](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#master-key-generation)** where the left 256 bits become the [**Master Private Key**](https://developer.bitcoin.org/devguide/wallets.html#id6) while the right 256 bits become the [**Master Chain Code**](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#master-key-generation) of the BIP32 HD wallet. The chain code is **necessary** to derive child keys.
 
 The **Master Extended Private Key** is the **Master Chain Code** and the **Master Private Key** [put together](https://developer.bitcoin.org/devguide/wallets.html#hierarchical-deterministic-key-creation). It is also named the **BIP32 Root Key**. They are the fundation of hierarchical deterministic wallets.
 
-> A given seed will **always yield** the same root key when hashed with the very same process / settings.
+> A given seed will **always yield** the same root key when hashed with the very same process and settings.
 
 > BIP32 root keys are usually stored in a [serialized](https://learnmeabitcoin.com/technical/extended-keys) format, starting with `xprv` (mainnet) or `tprv` (testnet).
 
@@ -166,33 +180,37 @@ The **Master Extended Private Key**, alongside a **[derivation path](https://lea
 ### Recap
 
 - **With legacy wallets:**
-  - You cannot use BIP39 to generate a seed.
+  - You cannot use BIP39 to generate a seed: a 512 bits output is incompatible.
   - You need to remember/archive a 256-bits seed, usually in [WIF format](https://learnmeabitcoin.com/technical/wif).
-  - You should migrate the wallet to a descriptor wallet (to support taproot or the [long term](https://github.com/bitcoin/bitcoin/issues/20160)).
+  - You should migrate the wallet to a descriptor wallet (to support taproot and the [long term](https://github.com/bitcoin/bitcoin/issues/20160)).
 
 - **With descriptor wallets:**
-  - You can use BIP39 and get a 24-words mnemonic for memorizing/archiving. If you stick to the BIP39 process, the mnemonic will always yield the same `BIP32 root key` that will be usable for generating whathever BIP 44/49/84/86 HD wallets standard you need to have in your wallet.
-  - If you don't want to use BIP39, you still have a 256 or 512 bits binary seed to remember some way.
+  - You can use BIP39 and get a 24-words mnemonic for memorizing/archiving entropy up to 256 bits. If you stick to the unaltered BIP39 process, the mnemonic will always yield the same `BIP32 root key` that will be usable for generating whathever BIP 44/49/84/86 HD wallets standard you need to have in your wallet.
+  - If you don't want to use BIP39, you still have 256 or 512 bits of entropy to remember some way.
 
 ## Import notes about wallets backups
 
-Wallets managed with Bitcoin Core are living organisms, especially on the long run. `hdseeds` can be rotated within the same legacy wallets, new descriptors can be added with different root keys, addresses can be generated with labels... As such, frequent backups of the full wallet file are still required because remembering a single seed will always mean only saving parts of what can make a complete wallet.
+Wallets managed with Bitcoin Core are living organisms, especially on the long run. For unstance, an original `hdseeds` can be rotated within the same legacy wallets, or new descriptors can be added with different root keys, or addresses can be generated with labels... As such, frequent backups of the full wallet file are still required because remembering a single seed will always mean only saving parts of what can make a complete wallet.
 
 # Demo
 
-> **Client**: Bitcoin Core 0.24-rc1
+> **Client**: Bitcoin Core 0.26
 
-## Legacy wallet
+## Legacy wallet (won't work after 0.26)
 
 - **Create a non-blank legacy wallet**:
 
 ```bash
-./bitcoin-cli -named createwallet wallet_name="legacy-wallet" blank=false passphrase="my-passphrase" descriptors=false load_on_startup=false
+$ ./bitcoind -deprecatedrpc=create_bdb -noconnect
+
+$ ./bitcoin-cli -named createwallet wallet_name="legacy-wallet" blank=false passphrase="my-passphrase" descriptors=false load_on_startup=false
 ```
 ```json
 {
   "name": "legacy-wallet",
-  "warning": "Wallet created successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future."
+  "warnings": [
+    "Wallet created successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future."
+  ]
 }
 ```
 
@@ -221,7 +239,7 @@ L1EasEYJHcHFUEHNT8D2W8yW2s9DzbhYjjCX8r8qrNa9Go7syAgg 2022-10-31T10:48:56Z hdseed
 
 > `L1EasEYJHcHFUEHNT8D2W8yW2s9DzbhYjjCX8r8qrNa9Go7syAgg` is the **256-bits hd seed** in WIF **compressed** format **from where** will always be generated the same **extended private masterkey**, if you exactly follow the BIP32 process of generating master keys.
 
-- **Now create a legacy but empty wallet**:
+- **Now create a legacy, but empty wallet**:
 
 ```bash
 ./bitcoin-cli -named createwallet wallet_name="legacy-wallet-restore" blank=true passphrase="my-passphrase" descriptors=false load_on_startup=false
@@ -459,22 +477,24 @@ There are also **2 descriptors per address type** in the wallet, one for payment
 
 We also notice that an active `taproot` descriptor has automatically been added for supporting taproot addresses in the wallet. Taproot is unsupported in legacy wallets.
 
-# BIP39 demo
+# Restoring a wallet from scratch
 
 > From a Standalone offline version of https://github.com/iancoleman/bip39
 
 - **BIP39 then BIP32 process reminder**:
 ```
-256 bits of entropy => Encoded in a 24 words mnemonic => PBKDF2 of mnemonic and a passphrase (default "") using BIP39 settings (2048 iterations) => Yields a 512 bits "BIP39 Seed".
+From 256 bits of entropy => Encoded in a 24 words mnemonic => PBKDF2 of mnemonic and a passphrase (default "") using BIP39 default settings (2048 iterations) => Yields a 512 bits "BIP39 Seed".
 
-"BIP39 Seed" => BTC coin: HMAC-SHA512 with "Bitcoin seed" as the key and the Seed as data (BIP32 settings) => BIP32 root key.
+"BIP39 Seed" => BTC coin: HMAC-SHA512 with "Bitcoin seed" as the key and the Seed as data with default BIP32 settings => Yield a "BIP32 root key".
 ```
 
 **Sample BIP32 root key**:
 
 > xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p
 
-Now we need to **generate the descriptors** to have in our wallet, two for each of the [HD wallet standard](https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md#features) you want supported by your wallet, such as:
+**This is the key that will be set for all the descriptor of our wallet.**
+
+Indeed, from our seed, to recreate the (modern) wallet, we need to **generate the descriptors** to have in our wallet with two descriptor for each of the [HD wallet standard](https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md#features) you want supported by your wallet, such as:
 
 - Pay-to-pubkey-hash scripts (P2PKH), through the `pkh` function (purpose id **[44'](https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#purpose)**).
 
@@ -487,11 +507,15 @@ Now we need to **generate the descriptors** to have in our wallet, two for each 
 
 [Reference](https://github.com/bitcoin/bitcoin/blob/master/doc/descriptors.md#reference)
 
+We'll go only for P2PKH to keep things easy.
+
+
 - **Generate the descriptors checksum**:
 
 ```bash
-# P2PKH, payment:
+# P2PKH - pkh() function, derivation path "44'/0'/0'", payment ("/0"), unhardened address "/*":
 ./bitcoin-cli -named getdescriptorinfo descriptor="pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/0/*)"
+
 {
   "descriptor": "pkh(xpub661MyMwAqRbcGB9EnCoeHgGNsN3utgzu8K4LzE7yMk5CnopnkMxP5gL4bqyWxA2gfqgU1SpMSDuckL1TyH5E5UFPghkMjY19nHg9UbJx4y6/44'/0'/0'/0/*)#zjhd60an",
   "checksum": "axglv7h8", # notice this
@@ -500,8 +524,9 @@ Now we need to **generate the descriptors** to have in our wallet, two for each 
   "hasprivatekeys": true
 }
 
-# P2PKH, change:
+# P2PKH - pkh() function, derivation path "44'/0'/0'", change ("/1"), unhardened address "/*":
 ./bitcoin-cli -named getdescriptorinfo descriptor="pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/1/*)"
+
 {
   "descriptor": "pkh(xpub661MyMwAqRbcGB9EnCoeHgGNsN3utgzu8K4LzE7yMk5CnopnkMxP5gL4bqyWxA2gfqgU1SpMSDuckL1TyH5E5UFPghkMjY19nHg9UbJx4y6/44'/0'/0'/1/*)#nxjv86dt",
   "checksum": "vjd73t8l", # notice this
@@ -509,12 +534,19 @@ Now we need to **generate the descriptors** to have in our wallet, two for each 
   "issolvable": true,
   "hasprivatekeys": true
 }
-...
+
+# Generate all the others descriptors you need for your wallet (wpkh, tr...)
 ```
 
-- **Generate the full JSON-descriptors to import in the wallet**:
+- **Generate the complete JSON data of each of the descriptors to import in the wallet**:
 
-The *payment* descriptor must be **active** and not **[internal](https://bitcoincore.org/en/doc/22.0.0/rpc/wallet/importdescriptors/)**, with a **range**:
+This step is about creating the full JSON data structure required by the Bitcoin Client to import the descriptor info previously generated.
+
+You will note that the previous commands are here to simply generate the required *checksum* to pass to the *importdescriptors* RPC call.
+
+**JSON structures:**
+
+Our *payment* descriptor must be **active** and not **[internal](https://bitcoincore.org/en/doc/22.0.0/rpc/wallet/importdescriptors/)**, with a **range**:
 
 ```json
 [{ "desc": "pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/0/*)#axglv7h8", "timestamp": "now", "internal": false, "active": true, "range": [0, 999], "next_index": 0 }]
@@ -528,7 +560,7 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 
 **Now escape the double quotes for bash processing:**
 
-> Replace the " with \\" in the previous JSON strings.
+> Replace the " with \\" in the previous JSON strings:
 ```
 # P2PKH, payment descriptor:
 [{ \"desc\": \"pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/0/*)#axglv7h8\", \"timestamp\": \"now\", \"internal\": false, \"active\": true, \"range\": [0, 999], \"next_index\": 0 }]
@@ -543,13 +575,13 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 - **Create a descriptor, empty wallet**:
 
 ```bash
-./bitcoin-cli -named createwallet wallet_name="wallet-desc" blank=true passphrase="my-passphrase" descriptors=true load_on_startup=false
+$ ./bitcoin-cli -named createwallet wallet_name="wallet-desc" blank=true passphrase="my-passphrase" descriptors=true load_on_startup=false
 
 # Unlock the wallet
-./bitcoin-cli -rpcwallet="wallet-desc" walletpassphrase my-"passphrase" 120
+$ ./bitcoin-cli -rpcwallet="wallet-desc" walletpassphrase "my-passphrase" 120
 
 # Wallet info
-./bitcoin-cli -rpcwallet="wallet-desc" getwalletinfo
+$ ./bitcoin-cli -rpcwallet="wallet-desc" getwalletinfo
 {
   "walletname": "wallet-desc",
   "walletversion": 169900,
@@ -570,11 +602,11 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 }
 ```
 
-- **Import the generated descriptors into the wallet**:
+- **Import all the generated descriptors into the wallet**:
 
 ```bash
 # P2PKH, payment descriptor:
-./bitcoin-cli -rpcwallet="wallet-desc" importdescriptors "[{ \"desc\": \"pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/0/*)#axglv7h8\", \"timestamp\": \"now\", \"internal\": false, \"active\": true, \"range\": [0, 999], \"next_index\": 0 }]"
+$ ./bitcoin-cli -rpcwallet="wallet-desc" importdescriptors "[{ \"desc\": \"pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/0/*)#axglv7h8\", \"timestamp\": \"now\", \"internal\": false, \"active\": true, \"range\": [0, 999], \"next_index\": 0 }]"
 [
   {
     "success": true
@@ -582,7 +614,7 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 ]
 
 # P2PKH, change descriptor:
-./bitcoin-cli -rpcwallet="wallet-desc" importdescriptors "[{ \"desc\": \"pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/1/*)#vjd73t8l\", \"timestamp\": \"now\", \"internal\": true, \"active\": true, \"range\": [0, 999], \"next_index\": 0 }]"
+$ ./bitcoin-cli -rpcwallet="wallet-desc" importdescriptors "[{ \"desc\": \"pkh(xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggeeyFtdjFJRLyJGGAp7Te1mgZh5dHL9B6p/44'/0'/0'/1/*)#vjd73t8l\", \"timestamp\": \"now\", \"internal\": true, \"active\": true, \"range\": [0, 999], \"next_index\": 0 }]"
 [
   {
     "success": true
@@ -591,7 +623,7 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 
 # Add all the others descriptors you need...
 
-./bitcoin-cli -rpcwallet="wallet-desc" getwalletinfo
+$ ./bitcoin-cli -rpcwallet="wallet-desc" getwalletinfo
 {
   "walletname": "wallet-desc",
   "walletversion": 169900,
@@ -612,9 +644,9 @@ The *change* descriptor must be **active** and **internal**, with a **range**:
 }
 ```
 
-**Notes:**
+**Notes (cheat sheet):**
 
-As of `Bitcoin Core 0.24-rc1`, **newly created descriptor wallets** have the **following descriptors** set by default:
+As of `Bitcoin Core 0.24-rc1`, **newly created descriptor wallets** have the **following private descriptors** created by default:
 
 ```bash
 ./bitcoin-cli -named createwallet wallet_name="wallet-desc-full" blank=false descriptors=true load_on_startup=false
@@ -718,7 +750,7 @@ As of `Bitcoin Core 0.24-rc1`, **newly created descriptor wallets** have the **f
 }
 ```
 
-- **Public descriptors**:
+- And their matching **Public descriptors** (for *watch-only* wallets):
 
 ```bash
 ./bitcoin-cli -rpcwallet="wallet-desc-full" listdescriptors
@@ -821,37 +853,40 @@ As of `Bitcoin Core 0.24-rc1`, **newly created descriptor wallets** have the **f
 
 You will notice that:
 
-- No descriptor refers to an `hdseed` anymore in these new wallets.
+- No descriptor refers to an `hdseed` anymore in descriptor wallets.
 
-- **Unhardened derivation** is now [used by default](https://bitcoin.stackexchange.com/questions/113834/mainnet-wallet-will-refuse-to-dump-privkeys#comment129650_113838) with descriptor wallets for all children (i.e *addresses*), as specified with the "`/*`" final step (rather than "`/*'`").
-
- and the all derivation path use hardened derivation steps (`'`).
+- **Unhardened addresses** is now [used by default](https://bitcoin.stackexchange.com/questions/113834/mainnet-wallet-will-refuse-to-dump-privkeys#comment129650_113838) with descriptor wallets, as specified with the "`/*`" final path (rather than "`/*'`"). Derivation path must use hardened derivation steps (`'`).
 
 ## Misc
 
-- **Generate descriptors with scripting?**
+- **How to generate descriptors with scripting?**
 
 > https://github.com/brianddk/reddit/blob/010934f/python/hdseed.py
 
 - **How can I quickly know that the address I just generated is still from the seed I have written down, and so my wallet hasn't changed without me knowing?**
 
-**For all wallets:**
+**For any wallets:**
 
 ```bash
-# Note: We only have imported descriptors for legacy addresses in this wallet
-./bitcoin-cli -rpcwallet="wallet-desc" getnewaddress "" legacy
-bc1q9emptu3ldvvd3tqf8mnhz2hgkqvaakhj2uu6w5
+# Note: We only have imported descriptors for "pkh" addresses in this wallet
+$ ./bitcoin-cli -rpcwallet="wallet-desc" getnewaddress "" legacy
+14XcVrUK68zzwe6ekA6JacvgYDkm5fj8ks
 
-[ip@xps src]$ ./bitcoin-cli -rpcwallet="wallet-desc" getaddressinfo 14XcVrUK68zzwe6ekA6JacvgYDkm5fj8ks | grep -E 'ismine|ischange|solvable|hdmasterfingerprint'
+$ ./bitcoin-cli -rpcwallet="wallet-desc" getaddressinfo 14XcVrUK68zzwe6ekA6JacvgYDkm5fj8ks | grep -E 'ismine|ischange|solvable|hdmasterfingerprint'
   "ismine": true,
   "solvable": true,
   "ischange": false,
-  "hdmasterfingerprint": "cf302f59",
+  "hdmasterfingerprint": "cf302f59", # note this
 ```
 
-**The `hdmasterfingerprint` of your address should match the first 4 bytes of the `RIPEMD-160` hash of the master public key corresponding to the private key set for the descriptor that generated the address.**
+**The `hdmasterfingerprint` of the address must match the first 4 bytes of the `RIPEMD-160` hash of the wallet's "Extended master Public Key". It is the private key (`xprv...`) set for the descriptor that generated the address.**
 
-You can first compute the corresponding [Extended Master Public Key](https://learnmeabitcoin.com/technical/extended-keys), deserialize it to get the `public key` bits that you need to "hash160". Follow the [BIP32 specs](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#extended-keys) or go with offline scripting if your trust the library enough:
+The process is:
+- Compute the corresponding [Extended Master Public Key](https://learnmeabitcoin.com/technical/extended-keys)
+- Deserialize it to get the `public key` bits
+- hash160 it
+
+To implement it, follow the [BIP32 specs](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#extended-keys) or go with offline scripting with the following code and 3rd party lib:
 
 ```python
 #!/usr/bin/env python3
@@ -918,20 +953,20 @@ print(hdmasterfingerprint)
 
 **- Converting xpub keys**
 
-Public descriptors of default wallets created with Bitcoin Core use master extended public keys starting with `xpub`. For instance our default descriptor wallet created above has the following key for P2WPKH (BIP84):
+Public descriptors of default wallets created with Bitcoin Core use master extended public keys starting with `xpub`. For instance our default descriptor wallet created above has the following key for the P2WPKH standard (BIP84):
 
 ```
 xpub6DBWPwWPcMhUfc5d4NR7amGSWDCLBHHG6bCT8yNijdiN1HA9rQGamkkUiT7BPxdAWHmjjbToL9RsgMLTxxTmW7cn4zxTbrAo4NtrHZKJ6gk
 ```
 
-If you import this key in some mobile wallet for a watch-only purpose, you may get the [BIP44 addresses](https://github.com/BlueWallet/BlueWallet/issues/2958) rather than the expected BIP84 addresses. A solution is to convert the key to its `zpub` [equivalent](https://github.com/satoshilabs/slips/blob/master/slip-0132.md#registered-hd-version-bytes) with a tool such as https://github.com/jlopp/xpub-converter.
+If you import this key in some mobile wallet for a watch-only purpose, you may obtain the [BIP44 addresses](https://github.com/BlueWallet/BlueWallet/issues/2958) rather than the expected *BIP84* addresses. A solution is to convert the key to its `zpub` [equivalent](https://github.com/satoshilabs/slips/blob/master/slip-0132.md#registered-hd-version-bytes) with a tool such as https://github.com/jlopp/xpub-converter.
 
 
 **- What about Ethereum?**
 
-As long as you have a `BIP32 Root Key`, you can use it for your Ethereum wallets with clients such as `geth`, `metamask`...
+As long as you have a `BIP32 Root Key`, you can use it for your Ethereum wallets with any clients such as `geth`, `metamask`...
 
-> The standard **BIP32 Derivation Path** for Etherum is `m/44'/60'/0'/0`.
+> The standard **BIP32 Derivation Path** for Ethereum is `m/44'/60'/0'/0`.
 
 For instance, using an offline version of https://iancoleman.io/bip39/:
 
@@ -945,7 +980,7 @@ xprv9s21ZrQH143K3h4mgBGdvYKeKLDRVEH3m68kBqiMoQYDv1VeCpe8Xt1akb1fNoh7hZcHAhfwggee
 
 - **Derivation path**: BIP44
 
-- First (non-hardened) derived address can be used as a first account:
+- The first (non-hardened) derived address can be used as your first account:
 
     - **Private key**: `0xa45ed09c1c0a70533078f980cc8ee58756ddbef012dcfe6cbece7cb49ab258eb`
     - **Account (address)**:
